@@ -7,7 +7,7 @@
  * A small, lightweight cache system for PHP5 or newer
  *
  * @author Brian Haveri
- * @link http://code.google.com/p/minicache
+ * @link http://github.com/brianhaveri/MiniCache
  * @license MIT License http://en.wikipedia.org/wiki/MIT_License
  * ------------------------------------------------------
  */
