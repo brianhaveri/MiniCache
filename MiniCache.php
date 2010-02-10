@@ -33,7 +33,7 @@ class MiniCache {
 	const CACHEDATA		= 'data';
 	const CACHEINFO		= 'info';
 	const CACHEDURATION	= 'duration';
-	const CACHEAGE			= 'age';
+	const CACHEAGE		= 'age';
 
 	
 	/*
@@ -133,8 +133,7 @@ class MiniCache {
 			$info[self::CACHEDURATION] = $duration;
 		}
 
-		$file = array(self::CACHEDATA=>$data,
-					  self::CACHEINFO=>$info);
+		$file = array(self::CACHEDATA=>$data, self::CACHEINFO=>$info);
 		return file_put_contents($this->_fpath($id), serialize($file));
 	}
 
@@ -282,9 +281,11 @@ class MiniCache {
 	 * ------------------------------------------------------
 	 */
 	private function _fpath($id) {
-		return join('', array($this->_path,
-							  $this->_sanitizeID($id),
-							  $this->_fext));
+		return join('', array(
+			$this->_path,
+			$this->_sanitizeID($id),
+			$this->_fext
+		));
 	}
 
 
