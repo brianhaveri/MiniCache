@@ -19,9 +19,9 @@ class MiniCache {
 	 * You can change these (optional)
 	 * ------------------------------------------------------
 	 */
-	private $_defaultDuration = 3600; // Seconds
-	private $_path = '/cache/'; // Path MUST exist, be writeable, and include trailing slash
-	private $_fext = '.cache'; // Cache file extension including dot
+	private $_defaultDuration = '3600';	// Seconds
+	private $_path = '/cache/';			// Path MUST exist, be writeable, and include trailing slash
+	private $_fext = '.cache';			// Cache file extension including dot
 
 	
 	/*
@@ -58,6 +58,17 @@ class MiniCache {
 			self::$_instance = new $c;
 		}
 		return self::$_instance;
+	}
+	
+	
+	/**
+	 * ------------------------------------------------------
+	 * Destroy the instance
+	 * ------------------------------------------------------
+	 */
+	public function destroyInstance() {
+		self::$_instance->_loaded = array();
+		self::$_instance = NULL;
 	}
 
 
@@ -134,7 +145,8 @@ class MiniCache {
 		}
 
 		$file = array(self::CACHEDATA=>$data, self::CACHEINFO=>$info);
-		return file_put_contents($this->_fpath($id), serialize($file));
+		$serializedData = serialize($file);
+		return file_put_contents($this->_fpath($id), $serializedData);
 	}
 
 
@@ -149,8 +161,8 @@ class MiniCache {
 
 		// Delete from instance vars
 		$id = $this->_sanitizeID($id);
-		if(is_array($this->_loaded) && array_key_exists($id, $this->_loaded)) {
-			unset($this->_loaded[$id]);
+		if(is_array(self::getInstance()->_loaded) && array_key_exists($id, self::getInstance()->_loaded)) {
+			unset(self::getInstance()->_loaded[$id]);
 		}
 
 		// Delete from disk
@@ -238,6 +250,31 @@ class MiniCache {
 		}
 		return FALSE;
 	}
+	
+	
+	/**
+	 *----------------------------------------
+	 * Set path
+	 * @param string $path Path
+	 * @return bool
+	 *----------------------------------------
+	 */
+	function setPath($path) {
+		$this->_path = $path;
+		return TRUE;
+	}
+	
+	
+	/**
+	 *----------------------------------------
+	 * Set duration
+	 * @param integer $seconds Seconds
+	 * @return bool
+	 *----------------------------------------
+	 */
+	function setDuration($seconds) {
+		$this->_duration = $seconds;
+	}
 
 
 	/**
@@ -256,8 +293,8 @@ class MiniCache {
 		
 		// Use data in _loaded if possible
 		$id = $this->_sanitizeID($id);
-		if(is_array($this->_loaded) && array_key_exists($id, $this->_loaded)) {
-			return $this->_loaded[$id];
+		if(is_array(self::getInstance()->_loaded) && array_key_exists($id, self::getInstance()->_loaded)) {
+			return self::getInstance()->_loaded[$id];
 		}
 		
 		// Data wasn't in _loaded, so let's read from disk
@@ -265,8 +302,8 @@ class MiniCache {
 		if(file_exists($fpath)) {
 			$data = unserialize(file_get_contents($fpath));
 			if(is_array($data)) {
-				$this->_loaded[$id] = $data;
-				return $this->_loaded[$id];
+				self::getInstance()->_loaded[$id] = $data;
+				return self::getInstance()->_loaded[$id];
 			}
 		}
 		return FALSE;
@@ -298,7 +335,7 @@ class MiniCache {
 	 * ------------------------------------------------------
 	 */
 	private function _isExpired($age, $duration) {
-		return $age > $duration;
+		return ($duration > 0 && $age > $duration);
 	}
 
 
