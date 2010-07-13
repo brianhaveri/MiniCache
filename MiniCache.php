@@ -11,29 +11,21 @@
  * @license MIT License http://en.wikipedia.org/wiki/MIT_License
  * ------------------------------------------------------
  */
+include(dirname(__FILE__).'/MiniCacheConfig.php');
 class MiniCache {
 
-	/*
-	 * ------------------------------------------------------
-	 * Configuration variables
-	 * You can change these (optional)
-	 * ------------------------------------------------------
-	 */
-	private $_defaultDuration = '3600';	// Seconds
-	private $_path = '/cache/';			// Path MUST exist, be writeable, and include trailing slash
-	private $_fext = '.cache';			// Cache file extension including dot
-
-	
 	/*
 	 * ------------------------------------------------------
 	 * Array keys used throughout class
 	 * You probably won't change these (but still optional)
 	 * ------------------------------------------------------
 	 */
-	const CACHEDATA		= 'data';
-	const CACHEINFO		= 'info';
-	const CACHEDURATION	= 'duration';
 	const CACHEAGE		= 'age';
+	const CACHEDATA		= 'data';
+	const CACHEDURATION	= 'duration';
+	const CACHEID		= 'id';
+	const CACHEINFO		= 'info';
+	const CACHEKEY		= 'key';
 
 	
 	/*
@@ -95,7 +87,8 @@ class MiniCache {
 	 * ------------------------------------------------------
 	 */
 	function get($id) {
-		$data = $this->_get($id);
+		$cacheKey = self::cacheKey($id);
+		$data = $this->_get($cacheKey);
 		if(is_array($data) && array_key_exists(self::CACHEDATA, $data)) {
 			return $data[self::CACHEDATA];
 		}
@@ -112,11 +105,12 @@ class MiniCache {
 	 * ------------------------------------------------------
 	 */
 	function getInfo($id) {
-		$data = $this->_get($id);
+		$cacheKey = self::cacheKey($id);
+		$data = $this->_get($cacheKey);
 		if(is_array($data) && array_key_exists(self::CACHEINFO, $data)) {
 
 			// Age isn't directly stored in the cache file, so calculate it
-			$data[self::CACHEINFO][self::CACHEAGE] = $this->_getAge($id);
+			$data[self::CACHEINFO][self::CACHEAGE] = $this->_getAge($cacheKey);
 			return $data[self::CACHEINFO];
 		}
 		return FALSE;
@@ -139,14 +133,25 @@ class MiniCache {
 	 * ------------------------------------------------------
 	 */
 	function set($id, $data, $duration = NULL) {
-		$info = array(self::CACHEDURATION=>$this->_defaultDuration);
-		if(is_int($duration)) {
-			$info[self::CACHEDURATION] = $duration;
-		}
+		if(! is_int($duration)) { $info[self::CACHEDURATION] = MINICACHE_DURATION; }
 
-		$file = array(self::CACHEDATA=>$data, self::CACHEINFO=>$info);
-		$serializedData = serialize($file);
-		return file_put_contents($this->_fpath($id), $serializedData);
+		$cacheKey = self::cacheKey($id);
+		$fpath = $this->_fpath($cacheKey);
+		$cacheData = array(
+			self::CACHEDATA	=> $data,
+			self::CACHEINFO	=> array(
+				self::CACHEDURATION	=> $duration,
+				self::CACHEID		=> $id,
+				self::CACHEKEY		=> $cacheKey
+			)
+		);
+		$serializedData = serialize($cacheData);
+		if(file_put_contents($fpath, $serializedData)) {
+			chmod($fpath, 0777);
+			self::getInstance()->_loaded[$cacheKey] = $cacheData;
+			return TRUE;
+		}
+		return FALSE;
 	}
 
 
@@ -158,15 +163,15 @@ class MiniCache {
 	 * ------------------------------------------------------
 	 */
 	function delete($id) {
+		$cacheKey = self::cacheKey($id);
 
 		// Delete from instance vars
-		$id = $this->_sanitizeID($id);
-		if(is_array(self::getInstance()->_loaded) && array_key_exists($id, self::getInstance()->_loaded)) {
-			unset(self::getInstance()->_loaded[$id]);
+		if(is_array(self::getInstance()->_loaded) && array_key_exists($cacheKey, self::getInstance()->_loaded)) {
+			unset(self::getInstance()->_loaded[$cacheKey]);
 		}
 
 		// Delete from disk
-		$fpath = $this->_fpath($id);
+		$fpath = $this->_fpath($cacheKey);
 		if(file_exists($fpath)) {
 			return unlink($fpath);
 		}
@@ -184,10 +189,11 @@ class MiniCache {
 	 */
 	function deleteAll() {
 		$numDeleted = 0;
-		$files = $this->listAll();
-		if(is_array($files)) {
-			foreach($files as $id) {
-				$numDeleted += (int) $this->delete($id);
+		$items = $this->listAll();
+		if(is_array($items)) {
+			foreach($items as $cacheKey=>$item) {
+				$info =& $item[self::CACHEINFO];
+				$numDeleted += (int) $this->delete($info[self::CACHEID]);
 			}
 		}
 		return $numDeleted;
@@ -203,13 +209,13 @@ class MiniCache {
 	 */
 	function deleteExpired() {
 		$numDeleted = 0;
-		$files = $this->listAll();
-		if(is_array($files)) {
-			foreach($files as $id) {
-				$info = $this->getInfo($id);
+		$items = $this->listAll();
+		if(is_array($items)) {
+			foreach($items as $cacheKey=>$item) {
+				$info =& $item[self::CACHEINFO];
 				if(is_array($info)) {
-					if($this->_isExpired($info[self::CACHEAGE], $info[self::CACHEDURATION])) {
-						$this->numDeleted += (int) $this->delete($id);
+					if(self::isExpired($this->_getAge($info[self::CACHEKEY]), $info[self::CACHEDURATION])) {
+						$numDeleted += (int) $this->delete($info[self::CACHEID]);
 					}
 				}
 			}
@@ -220,60 +226,34 @@ class MiniCache {
 
 	/**
 	 * ------------------------------------------------------
-	 * Returns IDs for all cache items
-	 * Returns FALSE if an error occurred
-	 * @return array|bool
+	 * Returns keys and info for all items
+	 * @return array
 	 * ------------------------------------------------------
 	 */
-	function listAll() {
-		$files = scandir($this->_path);
+	function listAll($startDir=NULL) {
+		if(is_null($startDir)) { $startDir = MINICACHE_PATH; }
+		
+		$files = scandir($startDir);
+		$items = array();
 		if($files && count($files) > 0) {
 			foreach($files as $k=>$fname) {
-
-				// Remove '.', '..', and any other subdirectories of _path
-				$fpath = $this->_path.$fname;
-				if(is_dir($fpath)) {
-					unset($files[$k]);
+				if(in_array($fname, array('.', '..', '.svn'))) { continue; }
+				
+				if(is_dir($startDir.'/'.$fname)) {
+					$items = array_merge($items, $this->listAll($startDir.'/'.$fname));
 					continue;
 				}
-
-				// We want the return array to contain IDs, not filenames
-				// So replace filename with ID
-				$files[$k] = $this->_extractID($fname);
+				
+				$data = $this->_get(basename($fname, MINICACHE_FEXT));
+				$cacheKey = $data[self::CACHEINFO][self::CACHEKEY];
+				unset(self::getInstance()->_loaded[$cacheKey]);
+				unset($data[self::CACHEDATA]);
+				$items[$cacheKey] = $data;
 			}
-
-			// Sorting resets the array keys, which otherwise would be
-			// offset by the previously existing subdirectories ('.', '..', etc.)
-			sort($files);
-
-			return $files;
+			ksort($items);
+			return $items;
 		}
-		return FALSE;
-	}
-	
-	
-	/**
-	 *----------------------------------------
-	 * Set path
-	 * @param string $path Path
-	 * @return bool
-	 *----------------------------------------
-	 */
-	function setPath($path) {
-		$this->_path = $path;
-		return TRUE;
-	}
-	
-	
-	/**
-	 *----------------------------------------
-	 * Set duration
-	 * @param integer $seconds Seconds
-	 * @return bool
-	 *----------------------------------------
-	 */
-	function setDuration($seconds) {
-		$this->_duration = $seconds;
+		return array();
 	}
 
 
@@ -281,29 +261,28 @@ class MiniCache {
 	 * ------------------------------------------------------
 	 * Returns all data (regular and metadata) for a cache item
 	 * Returns FALSE if an error occurred
-	 * @param string $id
+	 * @param string $cacheKey
 	 * @return array
 	 * ------------------------------------------------------
 	 */
-	private function _get($id) {
+	private function _get($cacheKey) {
 		
 		// _get() is called by multiple methods
 		// so we intermediately store and read the data using _loaded
 		// to minimize disk reads
 		
 		// Use data in _loaded if possible
-		$id = $this->_sanitizeID($id);
-		if(is_array(self::getInstance()->_loaded) && array_key_exists($id, self::getInstance()->_loaded)) {
-			return self::getInstance()->_loaded[$id];
+		if(is_array(self::getInstance()->_loaded) && array_key_exists($cacheKey, self::getInstance()->_loaded)) {
+			return self::getInstance()->_loaded[$cacheKey];
 		}
 		
 		// Data wasn't in _loaded, so let's read from disk
-		$fpath = $this->_fpath($id);
+		$fpath = $this->_fpath($cacheKey);
 		if(file_exists($fpath)) {
 			$data = unserialize(file_get_contents($fpath));
 			if(is_array($data)) {
-				self::getInstance()->_loaded[$id] = $data;
-				return self::getInstance()->_loaded[$id];
+				self::getInstance()->_loaded[$cacheKey] = $data;
+				return $data;
 			}
 		}
 		return FALSE;
@@ -313,15 +292,24 @@ class MiniCache {
 	/**
 	 * ------------------------------------------------------
 	 * Returns a full path for a cache item
-	 * @param string $id
+	 * @param string $cacheKey
 	 * @return string
 	 * ------------------------------------------------------
 	 */
-	private function _fpath($id) {
+	private function _fpath($cacheKey) {
+		$path = MINICACHE_PATH;
+		if(MINICACHE_DEPTH > 0) {
+			$segments = array_slice(str_split($cacheKey), 0, MINICACHE_DEPTH);
+			$path .= join('/', $segments);
+			if(! file_exists($path)) {
+				mkdir($path, 0777, TRUE);
+			}
+		}
+		
 		return join('', array(
-			$this->_path,
-			$this->_sanitizeID($id),
-			$this->_fext
+			$path.'/',
+			$cacheKey,
+			MINICACHE_FEXT
 		));
 	}
 
@@ -334,34 +322,20 @@ class MiniCache {
 	 * @return bool
 	 * ------------------------------------------------------
 	 */
-	private function _isExpired($age, $duration) {
-		return ($duration > 0 && $age > $duration);
+	public static function isExpired($age, $duration) {
+		return ($duration >= 0 && $age > $duration);
 	}
 
 
 	/**
 	 * ------------------------------------------------------
-	 * Sanitizes an ID string
+	 * Generate a cache key
 	 * @param string $id
 	 * @return string
 	 * ------------------------------------------------------
 	 */
-	private function _sanitizeID($id) {
-		$replaceChars = array('/', '\\', ' ', '.');
-		return str_replace($replaceChars, '-', strtolower($id));
-	}
-
-
-	/**
-	 * ------------------------------------------------------
-	 * Extracts an ID from the cache filename
-	 * Ex: _extractID('my-saved-file.cache') => 'my-saved-file'
-	 * @param string $fname
-	 * @return string
-	 * ------------------------------------------------------
-	 */
-	private function _extractID($fname) {
-		return preg_replace("/$this->_fext$/", '', $fname);
+	public static function cacheKey($id) {
+		return md5($id);
 	}
 
 
@@ -369,12 +343,12 @@ class MiniCache {
 	 * ------------------------------------------------------
 	 * Returns age of cache file (seconds)
 	 * Returns FALSE if an error occurred
-	 * @param string $id
+	 * @param string $cacheKey
 	 * @return integer|bool
 	 * ------------------------------------------------------
 	 */
-	private function _getAge($id) {
-		$fpath = $this->_fpath($id);
+	private function _getAge($cacheKey) {
+		$fpath = $this->_fpath($cacheKey);
 		if(file_exists($fpath)) {
 			return time() - filemtime($fpath);
 		}
