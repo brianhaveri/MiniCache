@@ -146,7 +146,7 @@ class MiniCache {
 			)
 		);
 		$serializedData = serialize($cacheData);
-		if(file_put_contents($fpath, $serializedData)) {
+		if(file_put_contents($fpath, $serializedData, LOCK_EX)) {
 			chmod($fpath, 0777);
 			self::getInstance()->_loaded[$cacheKey] = $cacheData;
 			return TRUE;
