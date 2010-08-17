@@ -1,5 +1,5 @@
 === What is MiniCache? ===
-MiniCache is a small, lightweight PHP5 cache system made for novice to intermediate developers, or skilled developers that don't demand the full feature set of memcached or APC.
+MiniCache is a small, lightweight PHP5 cache system made for novice to intermediate developers, or skilled developers that don't demand the full feature set of memcached.
 
 
 === Why use MiniCache? ===
@@ -8,18 +8,7 @@ MiniCache is a small, lightweight PHP5 cache system made for novice to intermedi
 * You want to parse data from multiple sources into a PHP array. MiniCache can act as a central data storage location, keeping your memory footprint lower.
 
 
-=== Getting Started ===
-* Set cache directory
-* Open MiniCache.php and edit line 23 to an absolute path that exists on your system.
-* Example:
-private $_path = '/myproject/cache/'; // Path MUST exist, be writeable, and include trailing slash
-
-
 ====== Sample Code ======
-private $_path = '/myproject/cache/'; // Path MUST exist, be writeable, and include trailing slash
-Sample code
-require('MiniCache.php');
-$data = array('red', 'blue'); // Sample data. You can store any datatype (array, object, string, etc.)
-$mc = MiniCache::getInstance();
-$mc->set('colors', $data);
-print_r($mc->get('colors')); // Array( [0]=> red, [1] => blue )
+$mc= MiniCache::getInstance();
+$mc->set('myfirstkey', 'Hello world!');
+echo $mc->get('myfirstkey'); // Hello world!
