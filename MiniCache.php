@@ -86,7 +86,7 @@ class MiniCache {
 	 * @return mixed|bool
 	 * ------------------------------------------------------
 	 */
-	function get($id) {
+	public function get($id) {
 		$cacheKey = self::cacheKey($id);
 		$data = $this->_get($cacheKey);
 		if(is_array($data) && array_key_exists(self::CACHEDATA, $data)) {
@@ -104,7 +104,7 @@ class MiniCache {
 	 * @return array|bool
 	 * ------------------------------------------------------
 	 */
-	function getInfo($id) {
+	public function getInfo($id) {
 		$cacheKey = self::cacheKey($id);
 		$data = $this->_get($cacheKey);
 		if(is_array($data) && array_key_exists(self::CACHEINFO, $data)) {
@@ -132,7 +132,7 @@ class MiniCache {
 	 * @return bool
 	 * ------------------------------------------------------
 	 */
-	function set($id, $data, $duration = NULL) {
+	public function set($id, $data, $duration = NULL) {
 		if(! is_int($duration)) { $info[self::CACHEDURATION] = MINICACHE_DURATION; }
 
 		$cacheKey = self::cacheKey($id);
@@ -162,7 +162,7 @@ class MiniCache {
 	 * @return bool
 	 * ------------------------------------------------------
 	 */
-	function delete($id) {
+	public function delete($id) {
 		$cacheKey = self::cacheKey($id);
 
 		// Delete from instance vars
@@ -187,7 +187,7 @@ class MiniCache {
 	 * @return integer
 	 * ------------------------------------------------------
 	 */
-	function deleteAll() {
+	public function deleteAll() {
 		$numDeleted = 0;
 		$items = $this->listAll();
 		if(is_array($items)) {
@@ -207,7 +207,7 @@ class MiniCache {
 	 * @return integer
 	 * ------------------------------------------------------
 	 */
-	function deleteExpired() {
+	public function deleteExpired() {
 		$numDeleted = 0;
 		$items = $this->listAll();
 		if(is_array($items)) {
@@ -230,7 +230,7 @@ class MiniCache {
 	 * @return array
 	 * ------------------------------------------------------
 	 */
-	function listAll($startDir=NULL) {
+	public function listAll($startDir=NULL) {
 		if(is_null($startDir)) { $startDir = MINICACHE_PATH; }
 		
 		$files = scandir($startDir);
